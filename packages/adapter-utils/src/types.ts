@@ -333,6 +333,8 @@ export interface CreateConfigValues {
   dangerouslyBypassSandbox: boolean;
   command: string;
   args: string;
+  allowedTools: string;
+  disallowedTools: string;
   extraArgs: string;
   envVars: string;
   envBindings: Record<string, unknown>;
