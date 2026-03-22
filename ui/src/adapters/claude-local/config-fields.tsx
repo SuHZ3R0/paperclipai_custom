@@ -335,7 +335,7 @@ export function ClaudeLocalAdvancedFields({
             className={inputClass}
           />
         )}
-}
+      </Field>
     </>
   );
 }
