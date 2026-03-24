@@ -46,10 +46,12 @@ import {
   Check,
   Loader2,
   ChevronDown,
+  MessageSquare,
   X
 } from "lucide-react";
+import { startConversation } from "../api/conversations";
 
-type Step = 1 | 2 | 3;
+type Step = 1 | 2 | 3 | 4;
 type AdapterType =
   | "claude_local"
   | "codex_local"
@@ -120,6 +122,7 @@ export function OnboardingWizard() {
     string | null
   >(null);
   const [createdAgentId, setCreatedAgentId] = useState<string | null>(null);
+  const [workMode, setWorkMode] = useState<"guided" | "quick" | null>(null);
 
   useEffect(() => {
     setRouteDismissed(false);
@@ -252,6 +255,7 @@ export function OnboardingWizard() {
     setCreatedCompanyId(null);
     setCreatedCompanyPrefix(null);
     setCreatedAgentId(null);
+    setWorkMode(null);
   }
 
   function handleClose() {
@@ -477,16 +481,42 @@ export function OnboardingWizard() {
     }
   }
 
-  function handleLaunch() {
+  async function handleLaunch() {
     if (!createdCompanyId || !createdAgentId) return;
-    setSelectedCompanyId(createdCompanyId);
-    reset();
-    closeOnboarding();
-    navigate(
-      createdCompanyPrefix
-        ? `/${createdCompanyPrefix}/agents/${createdAgentId}`
-        : `/agents/${createdAgentId}`
-    );
+    setLoading(true);
+    setError(null);
+    try {
+      setSelectedCompanyId(createdCompanyId);
+
+      if (workMode === "guided") {
+        // Create a conversation issue with the CEO
+        const convo = await startConversation(
+          createdCompanyId,
+          createdAgentId,
+          agentName.trim() || "CEO",
+        );
+        reset();
+        closeOnboarding();
+        navigate(
+          createdCompanyPrefix
+            ? `/${createdCompanyPrefix}/conversations/${convo.id}`
+            : `/conversations/${convo.id}`
+        );
+      } else {
+        // Quick start — navigate to agent detail page (current behavior)
+        reset();
+        closeOnboarding();
+        navigate(
+          createdCompanyPrefix
+            ? `/${createdCompanyPrefix}/agents/${createdAgentId}`
+            : `/agents/${createdAgentId}`
+        );
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to launch");
+    } finally {
+      setLoading(false);
+    }
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -494,7 +524,8 @@ export function OnboardingWizard() {
       e.preventDefault();
       if (step === 1 && companyName.trim()) handleStep1Next();
       else if (step === 2 && agentName.trim()) handleStep2Next();
-      else if (step === 3) handleLaunch();
+      else if (step === 3 && workMode) setStep(4);
+      else if (step === 4) handleLaunch();
     }
   }
 
@@ -539,7 +570,8 @@ export function OnboardingWizard() {
                   [
                     { step: 1 as Step, label: "Company", icon: Building2 },
                     { step: 2 as Step, label: "Agent", icon: Bot },
-                    { step: 3 as Step, label: "Launch", icon: Rocket }
+                    { step: 3 as Step, label: "Work Mode", icon: MessageSquare },
+                    { step: 4 as Step, label: "Launch", icon: Rocket },
                   ] as const
                 ).map(({ step: s, label, icon: Icon }) => (
                   <button
@@ -1042,13 +1074,75 @@ export function OnboardingWizard() {
                 <div className="space-y-5">
                   <div className="flex items-center gap-3 mb-1">
                     <div className="bg-muted/50 p-2">
+                      <MessageSquare className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <h3 className="font-medium">How do you want to start?</h3>
+                      <p className="text-xs text-muted-foreground">
+                        Choose how you'd like to begin working with your CEO agent.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid gap-3">
+                    <button
+                      className={cn(
+                        "flex items-start gap-3 rounded-md border p-4 text-left transition-colors",
+                        workMode === "guided"
+                          ? "border-foreground bg-accent"
+                          : "border-border hover:bg-accent/50"
+                      )}
+                      onClick={() => setWorkMode("guided")}
+                    >
+                      <MessageSquare className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium">Guided setup</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Start a conversation with your CEO. Provide your workspace paths,
+                          goals, and priorities interactively. The agent proposes a plan
+                          before taking any action.
+                        </p>
+                        <p className="text-[10px] text-muted-foreground/70 mt-1.5">
+                          Recommended for first-time setup
+                        </p>
+                      </div>
+                    </button>
+                    <button
+                      className={cn(
+                        "flex items-start gap-3 rounded-md border p-4 text-left transition-colors",
+                        workMode === "quick"
+                          ? "border-foreground bg-accent"
+                          : "border-border hover:bg-accent/50"
+                      )}
+                      onClick={() => setWorkMode("quick")}
+                    >
+                      <Rocket className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium">Quick start</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Go directly to the agent dashboard. Configure permissions,
+                          enable the heartbeat, and assign work when you're ready.
+                        </p>
+                        <p className="text-[10px] text-muted-foreground/70 mt-1.5">
+                          For experienced operators
+                        </p>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {step === 4 && (
+                <div className="space-y-5">
+                  <div className="flex items-center gap-3 mb-1">
+                    <div className="bg-muted/50 p-2">
                       <Rocket className="h-5 w-5 text-muted-foreground" />
                     </div>
                     <div>
                       <h3 className="font-medium">Ready to launch</h3>
                       <p className="text-xs text-muted-foreground">
-                        Everything is set up. You can configure agent permissions
-                        and start a conversation from the agent page.
+                        {workMode === "guided"
+                          ? "A conversation will be created with your CEO agent."
+                          : "You'll be taken to the agent dashboard to configure and start."}
                       </p>
                     </div>
                   </div>
@@ -1071,6 +1165,20 @@ export function OnboardingWizard() {
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {getUIAdapter(adapterType).label}
+                        </p>
+                      </div>
+                      <Check className="h-4 w-4 text-green-500 shrink-0" />
+                    </div>
+                    <div className="flex items-center gap-3 px-3 py-2.5">
+                      <MessageSquare className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">
+                          {workMode === "guided" ? "Guided setup" : "Quick start"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {workMode === "guided"
+                            ? "Conversation with CEO"
+                            : "Agent dashboard"}
                         </p>
                       </div>
                       <Check className="h-4 w-4 text-green-500 shrink-0" />
@@ -1133,13 +1241,27 @@ export function OnboardingWizard() {
                     </Button>
                   )}
                   {step === 3 && (
+                    <Button
+                      size="sm"
+                      disabled={!workMode || loading}
+                      onClick={() => setStep(4)}
+                    >
+                      <ArrowRight className="h-3.5 w-3.5 mr-1" />
+                      Next
+                    </Button>
+                  )}
+                  {step === 4 && (
                     <Button size="sm" disabled={loading} onClick={handleLaunch}>
                       {loading ? (
                         <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
                       ) : (
                         <ArrowRight className="h-3.5 w-3.5 mr-1" />
                       )}
-                      Launch
+                      {loading
+                        ? workMode === "guided"
+                          ? "Starting conversation..."
+                          : "Launching..."
+                        : "Launch"}
                     </Button>
                   )}
                 </div>

@@ -22,7 +22,8 @@ import {
 } from "@paperclipai/adapter-utils/server-utils";
 import { parseCodexJsonl, isCodexUnknownSessionError } from "./parse.js";
 import { pathExists, prepareManagedCodexHome, resolveManagedCodexHomeDir } from "./codex-home.js";
-import { resolveCodexDesiredSkillNames } from "./skills.js";
+// resolveCodexDesiredSkillNames is used by skills.ts for UI queries;
+// execute.ts calls resolvePaperclipDesiredSkillNames directly to pass wakeReason.
 
 const __moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const CODEX_ROLLOUT_NOISE_RE =
@@ -266,7 +267,11 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       ? path.resolve(envConfig.CODEX_HOME.trim())
       : null;
   const codexSkillEntries = await readPaperclipRuntimeSkillEntries(config, __moduleDir);
-  const desiredSkillNames = resolveCodexDesiredSkillNames(config, codexSkillEntries);
+  const wakeReason =
+    typeof context.wakeReason === "string" && context.wakeReason.trim().length > 0
+      ? context.wakeReason.trim()
+      : null;
+  const desiredSkillNames = resolvePaperclipDesiredSkillNames(config, codexSkillEntries, { wakeReason });
   await ensureAbsoluteDirectory(cwd, { createIfMissing: true });
   const preparedManagedCodexHome =
     configuredCodexHome ? null : await prepareManagedCodexHome(process.env, onLog, agent.companyId);
@@ -291,10 +296,6 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     (typeof context.taskId === "string" && context.taskId.trim().length > 0 && context.taskId.trim()) ||
     (typeof context.issueId === "string" && context.issueId.trim().length > 0 && context.issueId.trim()) ||
     null;
-  const wakeReason =
-    typeof context.wakeReason === "string" && context.wakeReason.trim().length > 0
-      ? context.wakeReason.trim()
-      : null;
   const wakeCommentId =
     (typeof context.wakeCommentId === "string" && context.wakeCommentId.trim().length > 0 && context.wakeCommentId.trim()) ||
     (typeof context.commentId === "string" && context.commentId.trim().length > 0 && context.commentId.trim()) ||

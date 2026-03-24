@@ -37,7 +37,7 @@ const __moduleDir = path.dirname(fileURLToPath(import.meta.url));
  * the repo's `skills/` directory, so `--add-dir` makes Claude Code discover
  * them as proper registered skills.
  */
-async function buildSkillsDir(config: Record<string, unknown>): Promise<string> {
+async function buildSkillsDir(config: Record<string, unknown>, options?: { wakeReason?: string | null }): Promise<string> {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-skills-"));
   const target = path.join(tmp, ".claude", "skills");
   await fs.mkdir(target, { recursive: true });
@@ -46,6 +46,7 @@ async function buildSkillsDir(config: Record<string, unknown>): Promise<string> 
     resolveClaudeDesiredSkillNames(
       config,
       availableEntries,
+      options,
     ),
   );
   for (const entry of availableEntries) {
@@ -343,7 +344,11 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     ),
   );
   const billingType = resolveClaudeBillingType(effectiveEnv);
-  const skillsDir = await buildSkillsDir(config);
+  const wakeReason =
+    typeof context.wakeReason === "string" && context.wakeReason.trim().length > 0
+      ? context.wakeReason.trim()
+      : null;
+  const skillsDir = await buildSkillsDir(config, { wakeReason });
 
   // When instructionsFilePath is configured, create a combined temp file that
   // includes both the file content and the path directive, so we only need

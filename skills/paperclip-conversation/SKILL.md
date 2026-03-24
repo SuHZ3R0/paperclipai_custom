@@ -5,6 +5,10 @@ description: >
   running the normal heartbeat procedure. When wake reason is conversation_reply
   or when the assigned issue has kind "conversation", skip the standard
   heartbeat entirely and follow this lightweight conversational flow instead.
+contexts:
+  - conversation_reply
+  - issue_assigned
+  - on_demand
 ---
 
 # Conversation Mode — CHECK FIRST

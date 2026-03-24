@@ -115,7 +115,8 @@ export async function syncClaudeSkills(
 
 export function resolveClaudeDesiredSkillNames(
   config: Record<string, unknown>,
-  availableEntries: Array<{ key: string; required?: boolean }>,
+  availableEntries: Array<{ key: string; required?: boolean; contexts?: string[] | null }>,
+  options?: { wakeReason?: string | null },
 ) {
-  return resolvePaperclipDesiredSkillNames(config, availableEntries);
+  return resolvePaperclipDesiredSkillNames(config, availableEntries, options);
 }

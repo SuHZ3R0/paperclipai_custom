@@ -49,6 +49,7 @@ export interface PaperclipSkillEntry {
   source: string;
   required?: boolean;
   requiredReason?: string | null;
+  contexts?: string[] | null;
 }
 
 export interface InstalledSkillTarget {
@@ -363,6 +364,38 @@ export async function resolvePaperclipSkillsDir(
   return null;
 }
 
+/**
+ * Parse the `contexts` field from a SKILL.md frontmatter block.
+ * Returns null if no contexts field is found (skill loads on every run).
+ */
+function parseSkillContextsFromFrontmatter(content: string): string[] | null {
+  const normalized = content.replace(/\r\n/g, "\n");
+  if (!normalized.startsWith("---\n")) return null;
+  const closing = normalized.indexOf("\n---\n", 4);
+  if (closing < 0) return null;
+  const frontmatter = normalized.slice(4, closing);
+  const contextsMatch = frontmatter.match(/^contexts:\s*$/m);
+  if (!contextsMatch) return null;
+  const lines = frontmatter.slice(contextsMatch.index! + contextsMatch[0].length).split("\n");
+  const contexts: string[] = [];
+  for (const line of lines) {
+    const itemMatch = line.match(/^\s+-\s+(.+)$/);
+    if (!itemMatch) break;
+    const value = itemMatch[1].trim().replace(/^["']|["']$/g, "");
+    if (value) contexts.push(value);
+  }
+  return contexts.length > 0 ? contexts : null;
+}
+
+async function readSkillContexts(skillSourceDir: string): Promise<string[] | null> {
+  try {
+    const content = await fs.readFile(path.join(skillSourceDir, "SKILL.md"), "utf8");
+    return parseSkillContextsFromFrontmatter(content);
+  } catch {
+    return null;
+  }
+}
+
 export async function listPaperclipSkillEntries(
   moduleDir: string,
   additionalCandidates: string[] = [],
@@ -371,16 +404,22 @@ export async function listPaperclipSkillEntries(
   if (!root) return [];
 
   try {
-    const entries = await fs.readdir(root, { withFileTypes: true });
-    return entries
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => ({
-        key: `paperclipai/paperclip/${entry.name}`,
-        runtimeName: entry.name,
-        source: path.join(root, entry.name),
-        required: true,
-        requiredReason: "Bundled Paperclip skills are always available for local adapters.",
-      }));
+    const dirEntries = await fs.readdir(root, { withFileTypes: true });
+    const skillDirs = dirEntries.filter((entry) => entry.isDirectory());
+    return Promise.all(
+      skillDirs.map(async (entry) => {
+        const source = path.join(root, entry.name);
+        const contexts = await readSkillContexts(source);
+        return {
+          key: `paperclipai/paperclip/${entry.name}`,
+          runtimeName: entry.name,
+          source,
+          required: true,
+          requiredReason: "Bundled Paperclip skills are always available for local adapters.",
+          contexts,
+        };
+      }),
+    );
   } catch {
     return [];
   }
@@ -597,18 +636,32 @@ function canonicalizeDesiredPaperclipSkillReference(
 
 export function resolvePaperclipDesiredSkillNames(
   config: Record<string, unknown>,
-  availableEntries: Array<{ key: string; runtimeName?: string | null; required?: boolean }>,
+  availableEntries: Array<{ key: string; runtimeName?: string | null; required?: boolean; contexts?: string[] | null }>,
+  options?: { wakeReason?: string | null },
 ): string[] {
   const preference = readPaperclipSkillSyncPreference(config);
+  const wakeReason = options?.wakeReason ?? null;
+  const entryByKey = new Map(availableEntries.map((entry) => [entry.key, entry]));
+
+  function matchesContext(entry: { contexts?: string[] | null }): boolean {
+    if (!entry.contexts || entry.contexts.length === 0) return true;
+    if (!wakeReason) return true;
+    return entry.contexts.includes(wakeReason);
+  }
+
   const requiredSkills = availableEntries
-    .filter((entry) => entry.required)
+    .filter((entry) => entry.required && matchesContext(entry))
     .map((entry) => entry.key);
   if (!preference.explicit) {
     return Array.from(new Set(requiredSkills));
   }
   const desiredSkills = preference.desiredSkills
     .map((reference) => canonicalizeDesiredPaperclipSkillReference(reference, availableEntries))
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((key) => {
+      const entry = entryByKey.get(key);
+      return !entry || matchesContext(entry);
+    });
   return Array.from(new Set([...requiredSkills, ...desiredSkills]));
 }
 
