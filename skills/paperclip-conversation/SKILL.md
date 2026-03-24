@@ -8,7 +8,7 @@ description: >
 contexts:
   - conversation_reply
   - issue_assigned
-  - on_demand
+  - issue_comment_mentioned
 ---
 
 # Conversation Mode — CHECK FIRST

@@ -14,6 +14,10 @@ const LEGACY_PROMPT_TEMPLATE_PATH = "promptTemplate.legacy.md";
 const IGNORED_INSTRUCTIONS_FILE_NAMES = new Set([".DS_Store", "Thumbs.db", "Desktop.ini"]);
 const IGNORED_INSTRUCTIONS_DIRECTORY_NAMES = new Set([
   ".git",
+  ".graph",
+  ".reference",
+  ".research",
+  ".data",
   ".nox",
   ".pytest_cache",
   ".ruff_cache",
@@ -21,6 +25,7 @@ const IGNORED_INSTRUCTIONS_DIRECTORY_NAMES = new Set([
   ".venv",
   "__pycache__",
   "node_modules",
+  "src",
   "venv",
 ]);
 
