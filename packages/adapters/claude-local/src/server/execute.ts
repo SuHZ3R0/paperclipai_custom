@@ -308,10 +308,6 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const chrome = asBoolean(config.chrome, false);
   const maxTurns = asNumber(config.maxTurnsPerRun, 0);
   const dangerouslySkipPermissions = asBoolean(config.dangerouslySkipPermissions, false);
-  const allowedTools = asStringArray(config.allowedTools).join(",")
-    || (typeof config.allowedTools === "string" ? config.allowedTools.trim() : "");
-  const disallowedTools = asStringArray(config.disallowedTools).join(",")
-    || (typeof config.disallowedTools === "string" ? config.disallowedTools.trim() : "");
   const instructionsFilePath = asString(config.instructionsFilePath, "").trim();
   const instructionsFileDir = instructionsFilePath ? `${path.dirname(instructionsFilePath)}/` : "";
   const commandNotes = instructionsFilePath
@@ -361,7 +357,6 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       const combinedPath = path.join(skillsDir, "agent-instructions.md");
       await fs.writeFile(combinedPath, instructionsContent + pathDirective, "utf-8");
       effectiveInstructionsFilePath = combinedPath;
-      await onLog("stderr", `[paperclip] Loaded agent instructions file: ${instructionsFilePath}\n`);
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       await onLog(
@@ -417,11 +412,6 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     const args = ["--print", "-", "--output-format", "stream-json", "--verbose"];
     if (resumeSessionId) args.push("--resume", resumeSessionId);
     if (dangerouslySkipPermissions) args.push("--dangerously-skip-permissions");
-    if (!dangerouslySkipPermissions && allowedTools && disallowedTools) {
-      console.warn("[paperclip] Both allowedTools and disallowedTools are set; ignoring disallowedTools.");
-    }
-if (!dangerouslySkipPermissions && allowedTools) args.push("--allowedTools", allowedTools);
-else if (!dangerouslySkipPermissions && disallowedTools) args.push("--disallowedTools", disallowedTools);
     if (chrome) args.push("--chrome");
     if (model) args.push("--model", model);
     if (effort) args.push("--effort", effort);
