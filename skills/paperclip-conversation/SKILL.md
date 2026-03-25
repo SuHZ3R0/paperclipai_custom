@@ -40,28 +40,27 @@ thread via @-mentions without interfering with the owner's state.
 If the conversation issue has **zero comments from non-agent users** (only your
 own comments or no comments at all), the board has not sent a message yet.
 
-Do this and exit immediately:
-
 1. `GET /api/agents/me` for identity
-2. `GET /api/issues/{issueId}/comments` to check for user messages
-3. If no user messages exist, post a brief greeting:
+2. Read your instruction files (SOUL.md, HEARTBEAT.md) if not already in context — your greeting should reflect your voice and identity, not a generic template.
+3. `GET /api/issues/{issueId}/comments` to check for user messages
+4. If no user messages exist, post a brief greeting **in your own voice**. Introduce yourself and signal readiness. Do not use canned phrases.
 ```
    POST /api/issues/{issueId}/comments
    Headers: X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID
-   { "body": "Ready. Send your message whenever you're ready." }
+   { "body": "<your greeting in your own voice>" }
 ```
-4. **If you are the owner** (assigneeAgentId matches your ID), set status to blocked:
+5. **If you are the owner** (assigneeAgentId matches your ID), set status to blocked:
 ```
    PATCH /api/issues/{issueId}
    Headers: X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID
    { "status": "blocked" }
 ```
    If you are a guest, skip this step.
-5. Exit. Do not fetch assignments, do not check inbox, do not do anything else.
+6. Exit. Do not fetch assignments, do not check inbox, do not do anything else.
 
 ## Case 2: Board sent a message (conversation_reply)
 
-1. **Identity**: `GET /api/agents/me` if not in context.
+1. **Identity**: `GET /api/agents/me` if not in context. Read your instruction files (SOUL.md, HEARTBEAT.md) if this is your first response in this session — your voice matters in conversations.
 
 2. **Read the message**: Fetch the triggering comment:
    - If `PAPERCLIP_WAKE_COMMENT_ID` is set: `GET /api/issues/{issueId}/comments/{commentId}`
