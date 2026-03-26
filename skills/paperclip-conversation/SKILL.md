@@ -94,6 +94,11 @@ own comments or no comments at all), the board has not sent a message yet.
    set up project, make a plan), do it using the normal Paperclip APIs and explain
    what you did in your response. Link to created issues/approvals/agents.
 
+8. **@-mentioning other agents**: When you need input from another agent in the
+   conversation, use the structured mention format: `[@AgentName](agent://agent-id)`.
+   Get agent IDs from `GET /api/companies/{companyId}/agents`. This triggers
+   their heartbeat so they join the conversation as a guest.
+
 ## Rules
 
 - Do NOT run any part of the standard heartbeat procedure
