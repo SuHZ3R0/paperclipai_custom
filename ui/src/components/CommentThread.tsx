@@ -51,6 +51,7 @@ interface CommentThreadProps {
   mentions?: MentionOption[];
   submitLabel?: string;
   placeholder?: string;
+  stickyInput?: boolean;
   hideReopen?: boolean;
   hideHeader?: boolean;
   /** Content shown when the timeline is empty. Pass null to suppress. Defaults to a text message. */
@@ -292,6 +293,7 @@ export function CommentThread({
   mentions: providedMentions,
   submitLabel,
   placeholder: placeholderProp,
+  stickyInput = false,
   hideReopen = false,
   hideHeader = false,
   emptyState,
@@ -439,7 +441,7 @@ export function CommentThread({
 
       {liveRunSlot}
 
-      <div className="space-y-2">
+      <div className={stickyInput ? "space-y-2 sticky bottom-0 bg-background pt-2 pb-1" : "space-y-2"}>
         <MarkdownEditor
           ref={editorRef}
           value={body}
