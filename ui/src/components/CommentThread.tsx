@@ -50,6 +50,7 @@ interface CommentThreadProps {
   suggestedAssigneeValue?: string;
   mentions?: MentionOption[];
   submitLabel?: string;
+  placeholder?: string;
   hideReopen?: boolean;
   hideHeader?: boolean;
   /** Content shown when the timeline is empty. Pass null to suppress. Defaults to a text message. */
@@ -290,6 +291,7 @@ export function CommentThread({
   suggestedAssigneeValue,
   mentions: providedMentions,
   submitLabel,
+  placeholder: placeholderProp,
   hideReopen = false,
   hideHeader = false,
   emptyState,
@@ -442,7 +444,7 @@ export function CommentThread({
           ref={editorRef}
           value={body}
           onChange={setBody}
-          placeholder="Type your message here..."
+          placeholder={placeholderProp ?? "Leave a comment..."}
           mentions={mentions}
           onSubmit={handleSubmit}
           imageUploadHandler={imageUploadHandler}
