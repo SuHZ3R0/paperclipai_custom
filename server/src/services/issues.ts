@@ -11,6 +11,7 @@ import {
   heartbeatRuns,
   executionWorkspaces,
   issueAttachments,
+  issueInboxArchives,
   issueLabels,
   issueComments,
   issueDocuments,
@@ -67,6 +68,7 @@ export interface IssueFilters {
   participantAgentId?: string;
   assigneeUserId?: string;
   touchedByUserId?: string;
+  inboxArchivedByUserId?: string;
   unreadForUserId?: string;
   projectId?: string;
   parentId?: string;
@@ -102,6 +104,7 @@ type IssueUserContextInput = {
   createdAt: Date | string;
   updatedAt: Date | string;
 };
+type ProjectGoalReader = Pick<Db, "select">;
 
 function sameRunLock(checkoutRunId: string | null, actorRunId: string | null) {
   if (actorRunId) return checkoutRunId === actorRunId;
@@ -112,6 +115,20 @@ const TERMINAL_HEARTBEAT_RUN_STATUSES = new Set(["succeeded", "failed", "cancell
 
 function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, "\\$&");
+}
+
+async function getProjectDefaultGoalId(
+  db: ProjectGoalReader,
+  companyId: string,
+  projectId: string | null | undefined,
+) {
+  if (!projectId) return null;
+  const row = await db
+    .select({ goalId: projects.goalId })
+    .from(projects)
+    .where(and(eq(projects.id, projectId), eq(projects.companyId, companyId)))
+    .then((rows) => rows[0] ?? null);
+  return row?.goalId ?? null;
 }
 
 function touchedByUserCondition(companyId: string, userId: string) {
@@ -198,6 +215,36 @@ function myLastTouchAtExpr(companyId: string, userId: string) {
   `;
 }
 
+function lastExternalCommentAtExpr(companyId: string, userId: string) {
+  return sql<Date | null>`
+    (
+      SELECT MAX(${issueComments.createdAt})
+      FROM ${issueComments}
+      WHERE ${issueComments.issueId} = ${issues.id}
+        AND ${issueComments.companyId} = ${companyId}
+        AND (
+          ${issueComments.authorUserId} IS NULL
+          OR ${issueComments.authorUserId} <> ${userId}
+        )
+    )
+  `;
+}
+
+function issueLastActivityAtExpr(companyId: string, userId: string) {
+  const lastExternalCommentAt = lastExternalCommentAtExpr(companyId, userId);
+  const myLastTouchAt = myLastTouchAtExpr(companyId, userId);
+  return sql<Date>`
+    COALESCE(
+      ${lastExternalCommentAt},
+      CASE
+        WHEN ${issues.updatedAt} > COALESCE(${myLastTouchAt}, to_timestamp(0))
+        THEN ${issues.updatedAt}
+        ELSE to_timestamp(0)
+      END
+    )
+  `;
+}
+
 function unreadForUserCondition(companyId: string, userId: string) {
   const touchedCondition = touchedByUserCondition(companyId, userId);
   const myLastTouchAt = myLastTouchAtExpr(companyId, userId);
@@ -215,6 +262,20 @@ function unreadForUserCondition(companyId: string, userId: string) {
           )
           AND ${issueComments.createdAt} > ${myLastTouchAt}
       )
+    )
+  `;
+}
+
+function inboxVisibleForUserCondition(companyId: string, userId: string) {
+  const issueLastActivityAt = issueLastActivityAtExpr(companyId, userId);
+  return sql<boolean>`
+    NOT EXISTS (
+      SELECT 1
+      FROM ${issueInboxArchives}
+      WHERE ${issueInboxArchives.issueId} = ${issues.id}
+        AND ${issueInboxArchives.companyId} = ${companyId}
+        AND ${issueInboxArchives.userId} = ${userId}
+        AND ${issueInboxArchives.archivedAt} >= ${issueLastActivityAt}
     )
   `;
 }
@@ -542,8 +603,9 @@ export function issueService(db: Db) {
     list: async (companyId: string, filters?: IssueFilters) => {
       const conditions = [eq(issues.companyId, companyId)];
       const touchedByUserId = filters?.touchedByUserId?.trim() || undefined;
+      const inboxArchivedByUserId = filters?.inboxArchivedByUserId?.trim() || undefined;
       const unreadForUserId = filters?.unreadForUserId?.trim() || undefined;
-      const contextUserId = unreadForUserId ?? touchedByUserId;
+      const contextUserId = unreadForUserId ?? touchedByUserId ?? inboxArchivedByUserId;
       const rawSearch = filters?.q?.trim() ?? "";
       const hasSearch = rawSearch.length > 0;
       const escapedSearch = hasSearch ? escapeLikePattern(rawSearch) : "";
@@ -581,6 +643,9 @@ export function issueService(db: Db) {
       }
       if (touchedByUserId) {
         conditions.push(touchedByUserCondition(companyId, touchedByUserId));
+      }
+      if (inboxArchivedByUserId) {
+        conditions.push(inboxVisibleForUserCondition(companyId, inboxArchivedByUserId));
       }
       if (unreadForUserId) {
         conditions.push(unreadForUserCondition(companyId, unreadForUserId));
@@ -730,6 +795,42 @@ export function issueService(db: Db) {
       return row;
     },
 
+    archiveInbox: async (companyId: string, issueId: string, userId: string, archivedAt: Date = new Date()) => {
+      const now = new Date();
+      const [row] = await db
+        .insert(issueInboxArchives)
+        .values({
+          companyId,
+          issueId,
+          userId,
+          archivedAt,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: [issueInboxArchives.companyId, issueInboxArchives.issueId, issueInboxArchives.userId],
+          set: {
+            archivedAt,
+            updatedAt: now,
+          },
+        })
+        .returning();
+      return row;
+    },
+
+    unarchiveInbox: async (companyId: string, issueId: string, userId: string) => {
+      const [row] = await db
+        .delete(issueInboxArchives)
+        .where(
+          and(
+            eq(issueInboxArchives.companyId, companyId),
+            eq(issueInboxArchives.issueId, issueId),
+            eq(issueInboxArchives.userId, userId),
+          ),
+        )
+        .returning();
+      return row ?? null;
+    },
+
     getById: async (id: string) => {
       const row = await db
         .select()
@@ -800,6 +901,7 @@ export function issueService(db: Db) {
 
       return db.transaction(async (tx) => {
         const defaultCompanyGoal = await getDefaultCompanyGoal(tx, companyId);
+        const projectGoalId = await getProjectDefaultGoalId(tx, companyId, issueData.projectId);
         let executionWorkspaceSettings =
           (issueData.executionWorkspaceSettings as Record<string, unknown> | null | undefined) ?? null;
         if (executionWorkspaceSettings == null && issueData.projectId) {
@@ -851,6 +953,7 @@ export function issueService(db: Db) {
           goalId: resolveIssueGoalId({
             projectId: issueData.projectId,
             goalId: issueData.goalId,
+            projectGoalId,
             defaultGoalId: defaultCompanyGoal?.id ?? null,
           }),
           ...(projectWorkspaceId ? { projectWorkspaceId } : {}),
@@ -951,11 +1054,21 @@ export function issueService(db: Db) {
 
       return db.transaction(async (tx) => {
         const defaultCompanyGoal = await getDefaultCompanyGoal(tx, existing.companyId);
+        const [currentProjectGoalId, nextProjectGoalId] = await Promise.all([
+          getProjectDefaultGoalId(tx, existing.companyId, existing.projectId),
+          getProjectDefaultGoalId(
+            tx,
+            existing.companyId,
+            issueData.projectId !== undefined ? issueData.projectId : existing.projectId,
+          ),
+        ]);
         patch.goalId = resolveNextIssueGoalId({
           currentProjectId: existing.projectId,
           currentGoalId: existing.goalId,
+          currentProjectGoalId,
           projectId: issueData.projectId,
           goalId: issueData.goalId,
+          projectGoalId: nextProjectGoalId,
           defaultGoalId: defaultCompanyGoal?.id ?? null,
         });
         const updated = await tx
