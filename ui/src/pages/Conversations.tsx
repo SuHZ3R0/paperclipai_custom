@@ -185,7 +185,7 @@ function ConversationList({
       </div>
 
       {/* List */}
-      <ScrollArea className="flex-1 w-full">
+      <ScrollArea className="flex-1 w-full [&>[data-slot=scroll-area-scrollbar]]:hidden">
         <div className="flex flex-col py-1 min-w-0">
           {filteredConversations.length === 0 && !search.trim() && (
             <div className="px-4 py-8 text-center">
@@ -563,6 +563,7 @@ function ConversationView({ issueId, companyId, agents, onClose, sidebarCollapse
     queryKey: queryKeys.issues.detail(issueId),
     queryFn: () => issuesApi.get(issueId),
     enabled: !!issueId,
+    refetchInterval: 10_000,
   });
 
   // ── Model selector queries ──────────────────────────────────────────────
